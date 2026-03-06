@@ -164,4 +164,100 @@ describe("Order Exchange", function () {
             expect(args._nonce).to.equal(nonce);
       	});
     });
+
+    describe("Fill Tests", function () {   
+        let receipt;
+        let amountA, amountB, expiry, nonce, signature;
+
+        beforeAll(async () => {
+            const { address: mockToken1Address, abi: abiMck1 } = mockToken1Contract;
+            const { address: mockToken2Address, abi: abiMck2 } = mockToken2Contract;
+            const mockHash1 = await owner.writeContract({ address: mockToken1Address, abi: abiMck1, functionName: "mint", args:[seller.account.address, parseUnits("1000", 18)] });
+            const mockHash2 = await owner.writeContract({ address: mockToken2Address, abi: abiMck2, functionName: "mint", args:[buyer.account.address, parseUnits("1000", 18)] });
+            await client.waitForTransactionReceipt({ hash: mockHash1 });
+            await client.waitForTransactionReceipt({ hash: mockHash2 });
+            const { address, abi } = contract;
+            amountA = parseUnits("10", 18);
+            amountB = parseUnits("5", 18);
+            expiry = BigInt(Math.floor(Date.now() / 1000) + 3600);
+            nonce = randomNonce();
+            const order = {
+                seller: seller.account.address,
+                tokenA: mockToken1Address,
+                tokenB: mockToken2Address,
+                amountA,
+                amountB,
+                expiry,
+                nonce,
+            };
+
+            signature = await seller.signTypedData({
+                domain: {
+                    name: "D21P2",
+                    version: "1",
+                    chainId: foundry.id,
+                    verifyingContract: address,
+                },
+                types: {
+                    Order: [
+                    { name: "seller", type: "address" },
+                    { name: "tokenA", type: "address" },
+                    { name: "tokenB", type: "address" },
+                    { name: "amountA", type: "uint256" },
+                    { name: "amountB", type: "uint256" },
+                    { name: "expiry", type: "uint256" },
+                    { name: "nonce", type: "uint256" },
+                    ],
+                },
+                primaryType: "Order",
+                message: order,
+            });
+
+            const hash = await owner.writeContract({
+                address,
+                abi,
+                functionName: "sellOrder",
+                args: [order, signature, true],
+            });
+            receipt = await client.waitForTransactionReceipt({ hash });
+            receipts.push({label: "SellOrder 1", receipt});
+
+            const approveHash1 = await seller.writeContract({ address: mockToken1Address, abi: abiMck1, functionName: "approve", args:[address, parseUnits("1000", 18)] });
+            const approveHash2 = await buyer.writeContract({ address: mockToken2Address, abi: abiMck2, functionName: "approve", args:[address, parseUnits("1000", 18)] });
+            await client.waitForTransactionReceipt({ hash: approveHash1 });
+            await client.waitForTransactionReceipt({ hash: approveHash2 });
+        });  
+
+        it("Should fill order", async function () {
+            const { abi, address } = contract;
+            const order = {
+                seller: seller.account.address,
+                tokenA: mockToken1Contract.address,
+                tokenB: mockToken2Contract.address,
+                amountA,
+                amountB,
+                expiry,
+                nonce,
+            };
+            const hash = await buyer.writeContract({
+                address,
+                abi,
+                functionName: "fillOrder",
+                args: [order, signature, order.amountA],
+            });
+            receipt = await client.waitForTransactionReceipt({ hash });
+            receipts.push({ label: "FillOrder 1", receipt });
+            
+            const { address: mockToken1Address, abi: abiMck1 } = mockToken1Contract;
+            const { address: mockToken2Address, abi: abiMck2 } = mockToken2Contract;
+            const sellerTokenABalance = await client.readContract({ address: mockToken1Address, abi: abiMck1, functionName: "balanceOf", args: [seller.account.address] });
+            const sellerTokenBBalance = await client.readContract({ address: mockToken2Address, abi: abiMck2, functionName: "balanceOf", args: [seller.account.address] });
+            const buyerTokenABalance = await client.readContract({ address: mockToken1Address, abi: abiMck1, functionName: "balanceOf", args: [buyer.account.address] });
+            const buyerTokenBBalance = await client.readContract({ address: mockToken2Address, abi: abiMck2, functionName: "balanceOf", args: [buyer.account.address] });
+            expect(sellerTokenABalance).to.equal(parseUnits("1990", 18));
+            expect(sellerTokenBBalance).to.equal(parseUnits("5", 18));
+            expect(buyerTokenABalance).to.equal(parseUnits("10", 18));
+            expect(buyerTokenBBalance).to.equal(parseUnits("1995", 18));
+        });
+    });
 });
