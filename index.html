@@ -1,0 +1,300 @@
+<!-- AI generated -->
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Exchange House</title>
+    <link rel="stylesheet" href="static/styles.css" />
+  
+    <style>
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .hint { display:block; margin-top:6px; color: var(--muted); font-size: 12px; }
+      .status-pill { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; background:#1b2230; }
+      .status-open { background:#17311f; }
+      .status-cancelled { background:#3a1f23; }
+      .status-filled { background:#2a2a2a; }
+      .row-actions { display:flex; gap:8px; align-items:center; }
+      .compact-btn { padding:6px 10px; font-size:12px; }
+      .compact-checkbox { width:18px; height:18px; }
+      #grid .grid-row { grid-template-columns: 1.2fr 1fr 1fr 1fr .9fr .9fr 1.1fr .9fr .7fr .7fr .7fr .5fr; }
+    </style>
+
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">EX</div>
+        <div class="brand-text">
+          <h1>The Exchange House</h1>
+          <div class="eyebrow">EIP-712 Off-chain Orders</div>
+        </div>
+      </div>
+      <div class="wallet">
+        <div class="wallet-row">
+          <select id="networkSelect" class="select"></select>
+          <button id="connectButton" class="btn">Connect Wallet</button>
+        </div>
+        <div id="walletStatus" class="status" aria-live="polite"></div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div id="contractLink" class="contract-link" hidden>
+        Exchange deployed on
+        <a id="contractLinkUrl" href="#" target="_blank" rel="noreferrer"></a>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head" id="panelHead" hidden>
+          <h2>Orders</h2>
+        </div>
+
+        <div id="message" class="message" role="status"></div>
+
+        <div class="actions">
+          <button id="refreshButton" class="btn ghost" type="button" hidden>Refresh</button>
+          <button id="createOrderButton" class="btn ghost" type="button" hidden>Create & Sign Order</button>
+
+          <button id="approveTokenAButton" class="btn ghost" type="button" hidden>Approve Token A (Seller)</button>
+          <button id="approveTokenBButton" class="btn ghost" type="button" hidden>Approve Token B (Buyer)</button>
+        </div>
+
+        <div id="grid" class="grid" hidden>
+          <div class="grid-row grid-header">
+            <div>Order Hash</div>
+            <div>Seller</div>
+            <div>Token A</div>
+            <div>Token B</div>
+            <div>Amount A</div>
+            <div>Amount B</div>
+            <div>Expiry</div>
+            <div>Status</div>
+            <div>Fill</div>
+            <div>Partial</div>
+            <div>Cancel</div>
+            <div>Select</div>
+          </div>
+          <div id="gridBody"></div>
+        </div>
+
+        <div id="pagination" class="pagination" hidden>
+          <button id="prevPage" class="btn ghost">Prev</button>
+          <div id="pageInfo" class="page-info"></div>
+          <button id="nextPage" class="btn ghost">Next</button>
+        </div>
+
+        <div class="actions" style="margin-top: 18px;">
+          <button id="fillFromJsonButton" class="btn ghost" type="button" hidden>Fill (Paste JSON)</button>
+          <button id="cancelFromJsonButton" class="btn ghost" type="button" hidden>Cancel (Paste JSON)</button>
+          <button id="bulkFillFromJsonButton" class="btn ghost" type="button" hidden>Bulk Fill (Paste JSON Array)</button>
+          <button id="bulkFillSelectedButton" class="btn ghost" type="button" hidden>Bulk Fill Selected</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- TX modal -->
+    <div id="txModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Transaction</h3>
+          <button id="closeModal" class="btn ghost">Close</button>
+        </div>
+        <div id="txBody" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Create & Sign Order -->
+    <div id="orderModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Create & Sign Order</h3>
+          <button id="closeOrderModal" class="btn ghost">Close</button>
+        </div>
+        <form id="orderForm" class="form modal-body">
+          <label class="field">
+            <span>Token A (sold)</span>
+            <input id="tokenA" type="text" placeholder="0x..." required />
+          </label>
+          <label class="field">
+            <span>Token B (requested)</span>
+            <input id="tokenB" type="text" placeholder="0x..." required />
+          </label>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Amount A (human)</span>
+              <input id="amountA" type="text" inputmode="decimal" placeholder="e.g. 100 or 0.5" required />
+            </label>
+            <label class="field">
+              <span>Token A decimals</span>
+              <input id="decimalsA" type="number" min="0" max="36" step="1" value="18" required />
+            </label>
+          </div>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Amount B (human)</span>
+              <input id="amountB" type="text" inputmode="decimal" placeholder="e.g. 200 or 1.25" required />
+            </label>
+            <label class="field">
+              <span>Token B decimals</span>
+              <input id="decimalsB" type="number" min="0" max="36" step="1" value="18" required />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Expiry (date & time)</span>
+            <input id="expiry" type="datetime-local" required />
+            <small class="hint">Stored on-chain as unix seconds. This input uses your local timezone.</small>
+          </label>
+
+          <label class="field">
+            <span>Nonce (uint256)</span>
+            <input id="nonce" type="text" placeholder="random number" required />
+          </label>
+
+          <div class="form-actions">
+            <button id="signOnlyButton" type="button" class="btn ghost">Sign Only</button>
+            <button id="signAndPublishButton" type="button" class="btn">Sign & Publish</button>
+          </div>
+
+          <label class="field">
+            <span>Signed Order JSON (share this)</span>
+            <textarea id="signedJson" rows="8"
+              style="width:100%; border-radius:10px; border:1px solid var(--border); padding:10px; background:#0f131c; color:var(--text);"
+              readonly></textarea>
+          </label>
+          <div class="form-actions">
+            <button id="copyJsonButton" type="button" class="btn ghost">Copy JSON</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Approve modal -->
+    <div id="approveModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3 id="approveTitle">Approve</h3>
+          <button id="closeApproveModal" class="btn ghost">Close</button>
+        </div>
+        <form id="approveForm" class="form modal-body">
+          <label class="field">
+            <span>Token Address</span>
+            <input id="approveToken" type="text" placeholder="0x..." required />
+          </label>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Amount (human)</span>
+              <input id="approveAmount" type="text" inputmode="decimal" placeholder="e.g. 100 or 0.5" required />
+            </label>
+            <label class="field">
+              <span>Token decimals</span>
+              <input id="approveDecimals" type="number" min="0" max="36" step="1" value="18" required />
+            </label>
+          </div>
+
+          <small class="hint">We convert human amounts to uint256 in the background.</small>
+
+          <div class="form-actions">
+            <button type="submit" class="btn">Approve</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Fill from JSON -->
+    <div id="fillModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Fill Order</h3>
+          <button id="closeFillModal" class="btn ghost">Close</button>
+        </div>
+        <form id="fillForm" class="form modal-body">
+          <label class="field">
+            <span>Order JSON</span>
+            <textarea id="fillJson" rows="8"
+              style="width:100%; border-radius:10px; border:1px solid var(--border); padding:10px; background:#0f131c; color:var(--text);"
+              required></textarea>
+          </label>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Fill Amount A (human)</span>
+              <input id="fillAmountA" type="text" inputmode="decimal" placeholder="e.g. 10 or 0.25" required />
+            </label>
+            <label class="field">
+              <span>Token A decimals</span>
+              <input id="fillDecimalsA" type="number" min="0" max="36" step="1" value="18" required />
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn">Submit Fill</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Cancel from JSON -->
+    <div id="cancelModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Cancel Order</h3>
+          <button id="closeCancelModal" class="btn ghost">Close</button>
+        </div>
+        <form id="cancelForm" class="form modal-body">
+          <label class="field">
+            <span>Order JSON</span>
+            <textarea id="cancelJson" rows="8"
+              style="width:100%; border-radius:10px; border:1px solid var(--border); padding:10px; background:#0f131c; color:var(--text);"
+              required></textarea>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn">Submit Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Bulk Fill from JSON Array -->
+    <div id="bulkModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Bulk Fill Orders</h3>
+          <button id="closeBulkModal" class="btn ghost">Close</button>
+        </div>
+        <form id="bulkForm" class="form modal-body">
+          <label class="field">
+            <span>JSON Array of Signed Orders</span>
+            <textarea id="bulkJson" rows="10"
+              style="width:100%; border-radius:10px; border:1px solid var(--border); padding:10px; background:#0f131c; color:var(--text);"
+              required></textarea>
+          </label>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Fill Amounts A (comma-separated human)</span>
+              <input id="bulkFillAmounts" type="text" placeholder="e.g. 10, 0.5, 3" required />
+            </label>
+            <label class="field">
+              <span>Default Token A decimals</span>
+              <input id="bulkFillDecimalsA" type="number" min="0" max="36" step="1" value="18" required />
+            </label>
+          </div>
+
+          <small class="hint">If your pasted JSON includes display.decimalsA, we will use it per-order; otherwise we use the default above.</small>
+
+          <div class="form-actions">
+            <button type="submit" class="btn">Submit Bulk Fill</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="static/app.js"></script>
+  </body>
+</html>
