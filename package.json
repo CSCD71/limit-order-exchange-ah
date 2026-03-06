@@ -2,5 +2,9 @@
   "dependencies": {
     "viem": "^2.47.0",
     "vitest": "^4.0.18"
+  },
+  "scripts": {
+    "test": "vitest --run tests/**",
+    "test:watch": "vitest"
   }
 }
